@@ -7,6 +7,8 @@ import { CustomersController } from './controllers/customers.controller';
 import { SalesController } from './controllers/sales.controller';
 import { DebtPaymentsController } from './controllers/debt-payments.controller';
 import { SettingsController } from './controllers/settings.controller';
+import { AuthController } from './controllers/auth.controller';
+import { UsersController } from './controllers/users.controller';
 
 @Module({
   imports: [],
@@ -18,6 +20,8 @@ import { SettingsController } from './controllers/settings.controller';
     SalesController,
     DebtPaymentsController,
     SettingsController,
+    AuthController,
+    UsersController,
   ],
   providers: [PrismaService],
 })

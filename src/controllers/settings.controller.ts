@@ -32,6 +32,7 @@ export class SettingsController {
   }
 
   @Put()
+  @Put(':id')
   async update(@Body() body: UpdateSettingsDto) {
     return this.prisma.settings.upsert({
       where: { id: 'singleton' },

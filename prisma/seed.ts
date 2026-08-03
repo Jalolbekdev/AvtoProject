@@ -54,6 +54,28 @@ async function main() {
     },
   });
 
+  // Seed default users
+  const defaultUsers = [
+    { username: 'admin', password: 'admin', role: 'admin', name: 'Администратор' },
+    { username: 'kassir', password: 'kassir', role: 'kassir', name: 'Кассир' },
+    { username: 'sklad', password: 'sklad', role: 'sklad', name: 'Омборчи' },
+  ];
+
+  const crypto = require('crypto');
+  for (const user of defaultUsers) {
+    const hashedPassword = crypto.createHash('sha256').update(user.password).digest('hex');
+    await prisma.user.upsert({
+      where: { username: user.username },
+      update: {},
+      create: {
+        username: user.username,
+        password: hashedPassword,
+        role: user.role,
+        name: user.name,
+      },
+    });
+  }
+
   console.log('Seeding finished.');
 }
 

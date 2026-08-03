@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 
 interface SaleItemDto {
@@ -19,6 +19,17 @@ interface CreateSaleDto {
   downPayment?: number;
   remainingDebt?: number;
   employee?: string;
+}
+
+interface ProcessPaymentDto {
+  customerId: string;
+  paymentAmount: number;
+  paymentType?: string;
+  updatedSales?: Array<{
+    id: string;
+    downPayment: number;
+    remainingDebt: number;
+  }>;
 }
 
 @Controller('api/sales')
@@ -105,4 +116,74 @@ export class SalesController {
       createdAt: sale.createdAt.getTime(),
     };
   }
+
+  @Patch('payment')
+  async processPayment(@Body() body: ProcessPaymentDto) {
+    if (!body.customerId || !body.paymentAmount || body.paymentAmount <= 0) {
+      throw new BadRequestException("Mijoz ID si va to'lov summasi ko'rsatilishi shart!");
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      if (body.updatedSales && body.updatedSales.length > 0) {
+        for (const item of body.updatedSales) {
+          await tx.sale.update({
+            where: { id: item.id },
+            data: {
+              downPayment: item.downPayment,
+              remainingDebt: item.remainingDebt,
+            },
+          });
+        }
+      } else {
+        const customerSales = await tx.sale.findMany({
+          where: {
+            customerId: body.customerId,
+            remainingDebt: { gt: 0 },
+          },
+          orderBy: { createdAt: 'asc' },
+        });
+
+        const totalDebt = customerSales.reduce((sum, s) => sum + (s.remainingDebt ?? 0), 0);
+
+        if (totalDebt > 0) {
+          for (const sale of customerSales) {
+            const saleDebt = sale.remainingDebt ?? 0;
+            const salePortion = (saleDebt / totalDebt) * body.paymentAmount;
+            const newRemainingDebt = Math.max(0, saleDebt - salePortion);
+            const newDownPayment = (sale.downPayment ?? 0) + salePortion;
+
+            await tx.sale.update({
+              where: { id: sale.id },
+              data: {
+                downPayment: newDownPayment,
+                remainingDebt: newRemainingDebt,
+              },
+            });
+          }
+        }
+      }
+
+      await tx.debtPayment.create({
+        data: {
+          customerId: body.customerId,
+          amount: body.paymentAmount,
+        },
+      });
+    });
+
+    const updatedSales = await this.prisma.sale.findMany({
+      include: {
+        items: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    return updatedSales.map(s => ({
+      ...s,
+      createdAt: s.createdAt.getTime(),
+    }));
+  }
 }
+

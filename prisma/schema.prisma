@@ -87,3 +87,11 @@ model Settings {
   address   String
   employee  String
 }
+
+model User {
+  id       String @id @default(uuid())
+  username String @unique
+  password String
+  role     String // "admin" | "kassir" | "sklad"
+  name     String
+}

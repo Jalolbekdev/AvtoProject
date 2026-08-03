@@ -5,11 +5,24 @@ const fs = require('node:fs');
 
 const env = { ...process.env };
 
+function cleanDatabaseUrl(raw) {
+  if (!raw) return raw;
+  return raw.trim().replace(/^['"]|['"]$/g, '');
+}
+
 (async () => {
   // If running the web server then migrate existing database
   if (process.argv.slice(-3).join(' ') === 'npm run start') {
-    const url = new URL(process.env.DATABASE_URL);
-    const target = url.protocol === 'file:' && url.pathname;
+    const databaseUrl = cleanDatabaseUrl(process.env.DATABASE_URL) || 'file:///data/sqlite.db';
+    let target;
+
+    try {
+      const url = new URL(databaseUrl);
+      target = url.protocol === 'file:' ? url.pathname : undefined;
+    } catch (error) {
+      console.error('Invalid DATABASE_URL:', databaseUrl);
+      throw error;
+    }
 
     // restore database if not present and replica exists
     let newDb = target && !fs.existsSync(target);
@@ -22,7 +35,7 @@ const env = { ...process.env };
 
     // prepare database
     await ensureDatabaseReady();
-    if (newDb) await exec('ts-node prisma/seed.ts');
+    if (newDb) await exec('npx ts-node prisma/seed.ts');
   }
 
   // launch application
@@ -51,13 +64,34 @@ async function ensureDatabaseReady() {
 }
 
 function exec(command) {
-  const child = spawn(command, { shell: true, stdio: 'inherit', env });
+  const child = spawn(command, { shell: true, env });
+  let stdout = '';
+  let stderr = '';
+
+  if (child.stdout) {
+    child.stdout.on('data', (chunk) => {
+      process.stdout.write(chunk);
+      stdout += chunk;
+    });
+  }
+
+  if (child.stderr) {
+    child.stderr.on('data', (chunk) => {
+      process.stderr.write(chunk);
+      stderr += chunk;
+    });
+  }
+
   return new Promise((resolve, reject) => {
+    child.on('error', (error) => {
+      reject(error);
+    });
+
     child.on('exit', (code) => {
       if (code === 0) {
         resolve();
       } else {
-        reject(new Error(`${command} failed rc=${code}`));
+        reject(new Error(`${command} failed rc=${code}\n${stdout}${stderr}`));
       }
     });
   });
